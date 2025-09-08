@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Matrices de Gauss</title>
+  <!-- icono que aparece en la pestaña del navegador -->
+  <link rel="icon" type="image/png" href="UNEVE.png">
+  <style>
+    /* ====== ESTILOS DE LA PÁGINA ====== */
+    body{
+      font-family:Inter,Segoe UI,Arial;
+      background:#071428; /* Fondo oscuro */
+      color:#e6eef8;      /* Texto claro */
+      margin:20px
+    }
+    .wrap{max-width:920px;margin:0 auto} /* Centrar contenido */
+
+    /* Panel donde van textarea, botones y resultados */
+    .panel{
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.04);
+      padding:16px;
+      border-radius:12px
+    }
+
+    textarea,input,button{font:inherit}
+    textarea{
+      width:100%; min-height:100px; padding:10px;
+      border-radius:8px;
+      background:#041024; color:inherit;
+      border:1px solid rgba(255,255,255,0.04)
+    }
+
+    .row{display:flex; gap:8px; margin-top:10px}
+
+    button{
+      padding:8px 10px;
+      border-radius:8px;
+      border:none;
+      cursor:pointer
+    }
+    .btn-primary{
+      background:linear-gradient(90deg,#06b6d4,#7c3aed);
+      color:white
+    }
+
+    /* Caja de código y pasos */
+    .code{
+      font-family:monospace;
+      background:#031427;
+      padding:8px;
+      border-radius:8px
+    }
+    .step{
+      background:#041525;
+      border:1px solid rgba(255,255,255,0.02);
+      padding:10px;
+      margin-top:8px;
+      border-radius:8px
+    }
+    .ok{color:#7ee787}   /* Verificación correcta */
+    .warn{color:#ffd580} /* Advertencia */
+    .err{color:#ff9b9b}  /* Error */
+    pre{margin:0}
+  </style>
+</head>
+<body>
+  <button onclick="location.href='index.html'">Pagína de Inicio</button>
+  <div class="wrap">
+    <h2>Matrices de Gauss</h2>
+    <div class="panel">
+      <label><strong>Ingresa 3 ecuaciones (una por línea)</strong></label>
+      <!-- Área donde el usuario escribe las ecuaciones -->
+      <textarea id="eqs" placeholder="Ejemplo:\n2x + 3y - z = 5\n-x + 4y + 2z = 3\n3x - y + z = 7">2x + 3y - z = 5
+-x + 4y + 2z = 3
+3x - y + z = 7</textarea>
+
+      <!-- Botones de acciones -->
+      <div class="row">
+        <button id="solve" class="btn-primary">Resolver paso a paso</button>
+        <button id="clear">Limpiar</button>
+        <button id="demo">Cargar ejemplo</button>
+      </div>
+
+      <!-- Aquí aparecerán los resultados -->
+      <div id="out" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <script>
+    /* ===== CONSTANTES Y FUNCIONES AUXILIARES ===== */
+    const EPS = 1e-10; // Umbral para considerar un número ≈ 0
+
+    // r(n) → redondea un número a 6 decimales (mejora visual)
+    function r(n,p=6){
+      return Number.isFinite(n)
+        ? Number(Math.abs(n) < EPS ? 0 : Number(n.toFixed(p)))
+        : n;
+    }
+
+    /* ======= PARSEAR EL TEXTO DEL USUARIO =======
+       Convierte 3 ecuaciones en matrices A (coeficientes) y b (constantes) */
+    function parse3(text){
+      const lines = text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+      if(lines.length !== 3) return {error:'Se requieren exactamente 3 ecuaciones.'};
+
+      // Expresiones regulares para detectar términos con variables y constantes
+      const termRe = /([+-]?\s*(?:\d+(?:\.\d+)?|\.\d+)?)([a-zA-Z]\w*)/g;
+      const constRe = /(^|[+\-])\s*(\d+(?:\.\d+)?|\.\d+)(?![a-zA-Z])/g;
+
+      const eqs=[]; const varsSet=new Set();
+
+      for(let i=0;i<3;i++){
+        const line = lines[i];
+        const parts = line.split('=');
+        if(parts.length!==2) return {error:`Línea ${i+1} falta '='`};
+
+        const L=parts[0], R=parts[1];
+        const coeffs=new Map(); // variable → coeficiente
+        let b=0; let m;
+
+        // Buscar términos con variables en lado izquierdo
+        termRe.lastIndex=0;
+        while((m=termRe.exec(L))){
+          let s=m[1].replace(/\s+/g,'');
+          let v=m[2];
+          let coef=(s===''||s==='+')?1:(s==='-'?-1:parseFloat(s));
+          coeffs.set(v,(coeffs.get(v)||0)+coef);
+          varsSet.add(v);
+        }
+
+        // Constantes en lado izquierdo (se pasan a derecha con signo opuesto)
+        constRe.lastIndex=0;
+        while((m=constRe.exec(L))){
+          const sign = m[1].includes('-')?-1:1;
+          b += -sign*parseFloat(m[2]);
+        }
+
+        // Buscar términos en lado derecho
+        termRe.lastIndex=0;
+        while((m=termRe.exec(R))){
+          let s=m[1].replace(/\s+/g,'');
+          let v=m[2];
+          let coef=(s===''||s==='+')?1:(s==='-'?-1:parseFloat(s));
+          coeffs.set(v,(coeffs.get(v)||0)-coef);
+          varsSet.add(v);
+        }
+
+        // Constantes en lado derecho (se suman directamente)
+        constRe.lastIndex=0;
+        while((m=constRe.exec(R))){
+          const sign = m[1].includes('-')?-1:1;
+          b += sign*parseFloat(m[2]);
+        }
+
+        eqs.push({coeffs,b});
+      }
+
+      // Ordenar variables alfabéticamente
+      const vars = Array.from(varsSet).sort((a,b)=>a.localeCompare(b,'es'));
+      if(vars.length !== 3) return {error:`Se requieren 3 variables (detectadas: ${vars.join(',')||'ninguna'})`};
+
+      // Construir matrices A y b
+      const A = eqs.map(eq => vars.map(v=> eq.coeffs.get(v)||0));
+      const b = eqs.map(eq=> eq.b);
+
+      return {A,b,vars};
+    }
+
+    /* ===== FORMATEAR ECUACIÓN =====
+       Convierte una fila de la matriz en ecuación legible */
+    function fmtEq(coefs, rhs, vars){
+      const parts = [];
+      for(let i=0;i<coefs.length;i++){
+        const c = coefs[i]; const v = vars[i];
+        if(Math.abs(c) < EPS) continue;
+        const sign = c<0? '-' : (parts.length? '+' : '');
+        const mag = Math.abs(c)===1 ? '' : Math.abs(c);
+        parts.push(`${sign} ${mag}${mag?'' : ''}${v}`.replace(/^\+ /,''));
+      }
+      const left = parts.length ? parts.join(' ').replace(/\+ -/,'- ') : '0';
+      return `${left} = ${r(rhs)}`;
+    }
+
+    /* Envolver pasos en HTML bonito */
+    function showStep(title, html){
+      return `<div class="step"><strong>${title}</strong><div class="code" style="margin-top:6px">${html}</div></div>`;
+    }
+
+    /* ====== FUNCIÓN PRINCIPAL ======
+       Aplica Gauss paso a paso (A/B, A/C, D/E, sustitución, comprobación) */
+    function solveManual(text){
+      const parsed = parse3(text);
+      if(parsed.error) return {error: parsed.error};
+
+      let {A,b,vars} = parsed; // Matriz A (3x3), vector b (3)
+      const steps = []; // Aquí se almacenan los pasos para mostrar en pantalla
+      const names = ['A','B','C']; // Nombres de ecuaciones
+
+      /* --- Paso 0: asegurar que el primer coeficiente no sea cero --- */
+      if(Math.abs(A[0][0]) < EPS){
+        let sel = -1;
+        for(let i=1;i<3;i++) if(Math.abs(A[i][0])>EPS) { sel = i; break; }
+        if(sel !== -1){
+          [A[0],A[sel]] = [A[sel],A[0]];
+          [b[0],b[sel]]=[b[sel],b[0]];
+          steps.push(`Intercambiar ${names[0]} ↔ ${names[sel]}`);
+        }
+      }
+
+      /* --- Mostrar ecuaciones originales --- */
+      const origHtml = `${names.map((n,i)=>`<div><strong>${n}</strong>: ${fmtEq(A[i], b[i], vars)}</div>`).join('')}`;
+      steps.push(`<strong>Ecuaciones originales</strong><br>${origHtml}`);
+
+      /* --- Paso 1: A/B → eliminar primera variable --- */
+      const a1 = A[0][0], a2 = A[1][0], a3 = A[2][0];
+      if(Math.abs(a1) < EPS && Math.abs(a2) < EPS && Math.abs(a3) < EPS)
+        return {error:'No es posible eliminar la primera variable (columna de ceros)'};
+
+      // Multiplicaciones y restas para crear ecuación D
+      const multA1 = a2, multB1 = a1;
+      const A_mul = A[0].map(v=> v * multA1), bA_mul = b[0] * multA1;
+      const B_mul = A[1].map(v=> v * multB1), bB_mul = b[1] * multB1;
+      const D = [ A_mul[1] - B_mul[1], A_mul[2] - B_mul[2] ];
+      const D_rhs = bA_mul - bB_mul;
+      const op1Html = `Multiplicar A por ${r(multA1)}: (${A_mul.map((v,i)=>r(v)+'·'+vars[i]).join(' + ')}) = ${r(bA_mul)}<br>`+
+                      `Multiplicar B por ${r(multB1)}: (${B_mul.map((v,i)=>r(v)+'·'+vars[i]).join(' + ')}) = ${r(bB_mul)}<br>`+
+                      `Restar: (A·${r(multA1)}) - (B·${r(multB1)}) → ${r(D[0])}${vars[1]} ${D[1]<0?'-':''} ${r(Math.abs(D[1]))}${vars[2]} = ${r(D_rhs)}`;
+      steps.push(showStep('Operación A/B (eliminar primera variable)', op1Html));
+
+      /* --- Paso 2: A/C → eliminar primera variable --- */
+      const multA2 = a3, multC1 = a1;
+      const A_mul2 = A[0].map(v=> v * multA2), bA_mul2 = b[0] * multA2;
+      const C_mul = A[2].map(v=> v * multC1), bC_mul = b[2] * multC1;
+      const E = [ A_mul2[1] - C_mul[1], A_mul2[2] - C_mul[2] ];
+      const E_rhs = bA_mul2 - bC_mul;
+      const op2Html = `Multiplicar A por ${r(multA2)}: (${A_mul2.map((v,i)=>r(v)+'·'+vars[i]).join(' + ')}) = ${r(bA_mul2)}<br>`+
+                      `Multiplicar C por ${r(multC1)}: (${C_mul.map((v,i)=>r(v)+'·'+vars[i]).join(' + ')}) = ${r(bC_mul)}<br>`+
+                      `Restar: (A·${r(multA2)}) - (C·${r(multC1)}) → ${r(E[0])}${vars[1]} ${E[1]<0?'-':''} ${r(Math.abs(E[1]))}${vars[2]} = ${r(E_rhs)}`;
+      steps.push(showStep('Operación A/C (eliminar primera variable)', op2Html));
+
+      /* --- Paso 3: D/E → eliminar segunda variable --- */
+      const Dy = D[0], Dz = D[1], Ey = E[0], Ez = E[1];
+      if(Math.abs(Dy) < EPS && Math.abs(Ey) < EPS){
+        steps.push(showStep('Advertencia', 'Ambas ecuaciones D y E tienen coeficiente 0 en la segunda variable; no se puede eliminar y con D/E.'));
+        return {steps, error:'No se puede eliminar la segunda variable con D y E (coeficientes nulos)'};
+      }
+      const multD = Ey, multE = Dy;
+      const D_mul_y = [Dy*multD, Dz*multD], D_rhs_mul = D_rhs * multD;
+      const E_mul_y = [Ey*multE, Ez*multE], E_rhs_mul = E_rhs * multE;
+      const Zcoef = D_mul_y[1] - E_mul_y[1], Zrhs = D_rhs_mul - E_rhs_mul;
+      const op3Html = `Multiplicar D por ${r(multD)}: (${r(D_mul_y[0])}${vars[1]} ${D_mul_y[1]<0?'-':'+'} ${r(Math.abs(D_mul_y[1]))}${vars[2]}) = ${r(D_rhs_mul)}<br>`+
+                      `Multiplicar E por ${r(multE)}: (${r(E_mul_y[0])}${vars[1]} ${E_mul_y[1]<0?'-':'+'} ${r(Math.abs(E_mul_y[1]))}${vars[2]}) = ${r(E_rhs_mul)}<br>`+
+                      `Restar: (D·${r(multD)}) - (E·${r(multE)}) → elimina ${vars[1]} y queda: ${r(Zcoef)}${vars[2]} = ${r(Zrhs)}`;
+      steps.push(showStep('Operación D/E (eliminar segunda variable y despejar la tercera)', op3Html));
+
+      if(Math.abs(Zcoef) < EPS)
+        return {steps, error:'No se puede despejar la tercera variable (coeficiente 0). Puede haber infinitas soluciones o inconsistencia.'};
+
+      // Resolver z
+      const z = Zrhs / Zcoef;
+      steps.push(showStep('Despejar tercera variable', `${r(z)} = ${vars[2]}`));
+
+      /* --- Paso 4: Sustituir z en D o E para hallar y --- */
+      let y;
+      if(Math.abs(Dy) > EPS){
+        y = (D_rhs - Dz * z) / Dy;
+        const subD = `${r(Dy)}·${vars[1]} + ${r(Dz)}·${vars[2]} = ${r(D_rhs)} → ${vars[1]} = (${r(D_rhs)} - ${r(Dz)}·(${r(z)})) / ${r(Dy)} = ${r(y)}`;
+        steps.push(showStep('Sustituir z en D para hallar y', subD));
+      } else if(Math.abs(Ey) > EPS){
+        y = (E_rhs - Ez * z) / Ey;
+        const subE = `${r(Ey)}·${vars[1]} + ${r(Ez)}·${vars[2]} = ${r(E_rhs)} → ${vars[1]} = (${r(E_rhs)} - ${r(Ez)}·(${r(z)})) / ${r(Ey)} = ${r(y)}`;
+        steps.push(showStep('Sustituir z en E para hallar y', subE));
+      } else {
+        return {steps, error:'No se pudo hallar la segunda variable (coeficientes nulos).'};
+      }
+
+      /* --- Paso 5: Sustituir y,z en A (o en otra ecuación) para hallar x --- */
+      let x;
+      let idxRowForX = 0;
+      if(Math.abs(A[0][0]) < EPS){
+        if(Math.abs(A[1][0])>EPS) idxRowForX = 1;
+        else if(Math.abs(A[2][0])>EPS) idxRowForX = 2;
+        else return {steps, error:'No existe coeficiente para la primera variable en ninguna ecuación; no se puede despejar x.'};
+        steps.push(`Usar ecuación ${names[idxRowForX]} para despejar la primera variable (x) porque el coeficiente en la primera fila es 0.`);
+      }
+      const a = A[idxRowForX][0], by = A[idxRowForX][1], bz = A[idxRowForX][2], brhs = b[idxRowForX];
+      x = (brhs - by*y - bz*z) / a;
+      const subX = `${r(a)}·${vars[0]} + ${r(by)}·(${r(y)}) + ${r(bz)}·(${r(z)}) = ${r(brhs)} → ${vars[0]} = (${r(brhs)} - ${r(by)}·(${r(y)}) - ${r(bz)}·(${r(z)})) / ${r(a)} = ${r(x)}`;
+      steps.push(showStep('Sustituir y,z en A (o en la ecuación disponible) para hallar x', subX));
+
+      /* --- Paso 6: Comprobación --- */
+      const checks = [];
+      for(let i=0;i<3;i++){
+        const lhs = A[i][0]*x + A[i][1]*y + A[i][2]*z;
+        checks.push({eq:i, lhs: r(lhs,6), rhs: r(b[i],6), ok: Math.abs(lhs - b[i]) < 1e-6});
+      }
+      const checkHtml = checks.map(c=>`<div>${names[c.eq]}: LHS=${c.lhs}, RHS=${c.rhs} → ${c.ok?'<span class="ok">OK</span>':'<span class="err">FALLA</span>'}</div>`).join('');
+      steps.push(showStep('Comprobación de las soluciones', checkHtml));
+
+      return {steps, solution:{[vars[0]]:r(x), [vars[1]]:r(y), [vars[2]]:r(z)}};
+    }
+
+    /* ====== INTERACCIÓN CON LA PÁGINA ====== */
+    const solveBtn = document.getElementById('solve');
+    const clearBtn = document.getElementById('clear');
+    const demoBtn = document.getElementById('demo');
+    const eqsTA = document.getElementById('eqs');
+    const outDiv = document.getElementById('out');
+
+    solveBtn.onclick = ()=>{
+      const res = solveManual(eqsTA.value);
+      if(res.error){
+        outDiv.innerHTML = `<div class="step err"><strong>Error:</strong> ${res.error}</div>`;
+        return;
+      }
+      const html = res.steps.join('') +
+        `<div class="step"><strong>Solución final</strong><br>`+
+        Object.entries(res.solution).map(([v,val])=>`${v} = ${val}`).join(', ')+
+        `</div>`;
+      outDiv.innerHTML = html;
+    };
+
+    clearBtn.onclick = ()=>{eqsTA.value=''; outDiv.innerHTML='';};
+
+    demoBtn.onclick = ()=>{
+      eqsTA.value = `4x + 2y + 3z = 8\n3x + 4y - 2z = -1\n2x - y + 5z = 3`;
+      outDiv.innerHTML='';
+    };
+
+
+
+
+/* 
+ Metodos Númericos
+ Fecha: 04/09/2025
+ Integrantes
+ Castillo Delgado Brenda Lisette
+ Sánchez Cruz Alexis Raziel
+ Sanjuan Córtes Rebeca Margarita
+ Telléz Telléz Carolina */
+
+
+
+
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+  <button onclick="location.href='index.html'">Pagína de Inicio</button>
+<title>Interpolación Lineal con Función</title>
+<!-- icono que aparece en la pestaña del navegador -->
+  <link rel="icon" type="image/png" href="UNEVE.png">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+/* Estilos generales */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f0f4f8;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Contenedor principal */
+.container {
+    background: white;
+    padding: 25px 40px;
+    border-radius: 12px;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    max-width: 700px;
+    width: 100%;
+}
+
+/* Títulos */
+h2, h3 {
+    text-align: center;
+    color: #333;
+}
+
+/* Inputs y labels */
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+input[type="number"], input[type="text"] {
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 14px;
+    transition: border 0.3s;
+}
+
+input[type="number"]:focus, input[type="text"]:focus {
+    border: 1.5px solid #4a90e2;
+    outline: none;
+}
+
+/* Botón */
+button {
+    width: 100%;
+    padding: 12px;
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s;
+    margin-bottom: 20px;
+}
+
+button:hover {
+    background: #357ABD;
+}
+
+/* Resultados */
+#resultado, #error {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 15px;
+    color: #555;
+}
+
+/* Tabla */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+th, td {
+    padding: 10px 12px;
+    text-align: center;
+}
+
+th {
+    background: #4a90e2;
+    color: white;
+    font-weight: 600;
+}
+
+td {
+    background: #f9f9f9;
+}
+
+/* Canvas gráfico */
+canvas {
+    margin-top: 20px;
+    background: #f7f9fb;
+    border-radius: 12px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+    .container {
+        padding: 20px;
+    }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h2>Interpolación Lineal</h2>
+
+<label>x₀: <input type="number" id="x0" value="1"></label>
+<label>f(x₀): <input type="number" id="fx0" value="2"></label>
+
+<label>x₁: <input type="number" id="x1" value="4"></label>
+<label>f(x₁): <input type="number" id="fx1" value="8"></label>
+
+<label>Punto a estimar x: <input type="number" id="x" value="2"></label>
+
+<label>Función f(x) para la tabla (ej: e^x, x^2+1, sin(x)):</label>
+<input type="text" id="funcion" placeholder="Ej: e^x o x^2+3*x+1">
+
+<label>Valor real f(x) (opcional): <input type="number" id="fxReal" placeholder="Opcional"></label>
+
+<button onclick="interpolar()">Calcular</button>
+
+<h3>Resultado</h3>
+<p id="resultado"></p>
+<p id="error"></p>
+
+<h3>Tabla de Valores</h3>
+<table id="tabla">
+<tr><th>x</th><th>f(x)</th></tr>
+</table>
+
+<h3>Gráfica</h3>
+<canvas id="grafica" width="300" height="200"></canvas>
+</div>
+
+<script>
+// Función para convertir la notación amigable a JavaScript
+function convertirFuncion(str) {
+    let s = str;
+    s = s.replace(/\^/g, "**"); // Convertir x^2 a x**2
+    s = s.replace(/e\*\*x/g, "Math.exp(x)"); // e^x
+    s = s.replace(/sin\(/g, "Math.sin(");
+    s = s.replace(/cos\(/g, "Math.cos(");
+    s = s.replace(/tan\(/g, "Math.tan(");
+    s = s.replace(/log\(/g, "Math.log(");
+    return s;
+}
+
+function interpolar() {
+    let x0 = parseFloat(document.getElementById("x0").value);
+    let fx0 = parseFloat(document.getElementById("fx0").value);
+    let x1 = parseFloat(document.getElementById("x1").value);
+    let fx1 = parseFloat(document.getElementById("fx1").value);
+    let x = parseFloat(document.getElementById("x").value);
+    let fxReal = document.getElementById("fxReal").value;
+    let funcionStr = document.getElementById("funcion").value;
+
+    // Interpolación lineal
+    let fInterp = fx0 + ((fx1 - fx0) / (x1 - x0)) * (x - x0);
+    document.getElementById("resultado").innerHTML =
+        `El valor estimado de f(${x}) es <b>${fInterp.toFixed(4)}</b>`;
+
+    let tabla = document.getElementById("tabla");
+    tabla.innerHTML = "<tr><th>x</th><th>f(x)</th></tr>";
+
+    let datasets = [
+        {label:'Interpolación', data:[{x:x0,y:fx0},{x:x1,y:fx1}], showLine:true, borderColor:'blue', backgroundColor:'blue', fill:false},
+        {label:'Punto estimado', data:[{x:x,y:fInterp}], borderColor:'red', backgroundColor:'red', pointRadius:6}
+    ];
+
+    if(funcionStr !== "") {
+        try {
+            let fJs = convertirFuncion(funcionStr);
+            let f = new Function("x", "return " + fJs + ";");
+
+            let fx0Func = f(x0), fx1Func = f(x1), fxFunc = f(x);
+            tabla.innerHTML += `<tr><td>${x0}</td><td>${fx0Func.toFixed(4)}</td></tr>`;
+            tabla.innerHTML += `<tr><td>${x1}</td><td>${fx1Func.toFixed(4)}</td></tr>`;
+            tabla.innerHTML += `<tr><td>${x}</td><td>${fxFunc.toFixed(4)}</td></tr>`;
+
+            if(fxReal==="") {
+                let error = Math.abs(fxFunc-fInterp)/Math.abs(fxFunc);
+                document.getElementById("error").innerHTML =
+                    `Error relativo con la función: <b>${(error*100).toFixed(2)}%</b>`;
+            }
+
+            let puntosFunc = [];
+            let pasos = 50;
+            let minX = Math.min(x0,x1,x);
+            let maxX = Math.max(x0,x1,x);
+            let dx = (maxX-minX)/pasos;
+            for(let xi = minX; xi <= maxX; xi += dx) puntosFunc.push({x:xi,y:f(xi)});
+
+            datasets.push({label:'Función', data:puntosFunc, borderColor:'green', backgroundColor:'green', showLine:true, fill:false, pointRadius:0});
+        } catch(err){
+            alert("Estimación de error: "+err.message);
+        }
+    } else {
+        tabla.innerHTML += `<tr><td>${x0}</td><td>${fx0}</td></tr>`;
+        tabla.innerHTML += `<tr><td>${x1}</td><td>${fx1}</td></tr>`;
+        tabla.innerHTML += `<tr><td>${x}</td><td>${fInterp.toFixed(4)}</td></tr>`;
+    }
+
+    let ctx = document.getElementById("grafica").getContext("2d");
+    if(window.miGrafica) window.miGrafica.destroy();
+    window.miGrafica = new Chart(ctx, {type:'scatter', data:{datasets:datasets}, options:{scales:{x:{title:{display:true,text:'x'}}, y:{title:{display:true,text:'f(x)'}}}}});
+}
+
+/* 
+ Metodos Númericos
+ Fecha: 04/09/2025
+ Integrantes
+ Castillo Delgado Brenda Lisette
+ Sánchez Cruz Alexis Raziel
+ Sanjuan Córtes Rebeca Margarita
+ Telléz Telléz Carolina */
+
+
+</script>
+</body>
+</html>
